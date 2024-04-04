@@ -26,13 +26,10 @@ def rnd_smp_patch(img_path, img_type, patch_size, num_patch, upscale):
         
         #Sample the Patches
         H, L = sample_patches(im, patch_size, patch_num, upscale)
-        
+                
         #Append to Xh and Xl
         Xh.append(H)
         Xl.append(L)
-        
     
-## Testing Stuff
-img_path = "Data/Training"
-img_type = ".bmp"
-rnd_smp_patch(img_path, img_type, 5, 100000, 2)
+    Xh, Xl = np.concatenate(Xh, axis = 1), np.concatenate(Xl, axis = 1)
+    return Xh, Xl
