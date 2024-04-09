@@ -25,3 +25,10 @@ cv2.imshow('Blurred Image', blurred_image)
 cv2.imshow('Low Resolution Image', lIm)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
+
+#Y = SH X
+#Y X^{-1} = SH
+
+SH = lIm @ np.linalg.inv(hIm)
+
+print(SH)
