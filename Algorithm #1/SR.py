@@ -1,5 +1,6 @@
 ### Experimenting Around with Algorithm 1
 import numpy as np
+import cv2
 
 #I: Image/Array
 #patch_shape: shape of patch
@@ -132,7 +133,20 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray):
         print(f"Finished Processing Patch # {patch_num + 1}")
     
     return X0   
-        
+
+# reconstruction gradient descent to find 
+def reconstruction_GD(X0: np.ndarray, Y: np.ndarray, v, c, numIter=100): 
+    Xt = np.zeros(shape=X0.shape)
+
+    for _ in range(numIter): 
+        blurred_Xt = cv2.GaussianBlur(Xt, (21, 21), 0)
+        downsampled_blurred_Xt = cv2.resize(blurred_Xt, Y.shape)
+
+        Xt = Xt + v * (cv2.GaussianBlur(cv2.resize((Y - downsampled_blurred_Xt), Xt.shape), (21, 21), 0) + c * (Xt - X0))
+
+    return Xt
+
+
         
 #prox operator
 def prox(x, alpha):
@@ -179,6 +193,12 @@ Dh = np.random.normal(size = (9, 512))
 Dl = np.random.normal(size = (9, 512)) #since we are only using 1 1D filter for now, set to 9
 Y = np.random.normal(size = (100, 100))
 
-X = SR(Dh, Dl, Y)
+X0 = SR(Dh, Dl, Y)
 
-print(np.linalg.norm(Y - X) ** 2 / np.linalg.norm(Y) ** 2)
+Xstar = reconstruction_GD(X0, Y, 0.1, 10)
+
+print(Xstar.shape)
+print(Y.shape)
+
+print("MSE before:", np.linalg.norm(Y - X0) ** 2 / np.linalg.norm(Y) ** 2)
+print("MSE after:", np.linalg.norm(Y - Xstar) ** 2 / np.linalg.norm(Y) ** 2)
