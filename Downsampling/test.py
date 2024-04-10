@@ -1,6 +1,9 @@
 #Test Class to downsample images
 import numpy as np
 from scipy.sparse import csr_matrix
+import cv2
+import matplotlib.pyplot as plt
+
 
 #Downsample an Image
 def downsample(image: np.ndarray):
@@ -19,9 +22,30 @@ def downsample(image: np.ndarray):
     return downsample_matrix
 
 
-image = np.random.randn(512, 512)
+# Load an image using OpenCV
+image = cv2.imread('../Image Experimentation/test.jpeg')
 
-downsample_matrix = downsample(image)
+# Downsample the image using OpenCV's resize function
+hIm = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+upscale = 2
+print(hIm)
 
-downsampled_image = downsample_matrix @ image.reshape((-1, 1))
-downsampled_image = downsampled_image.reshape(image.shape)
+M = downsample(hIm)
+
+lIm = M @ hIm.reshape((-1, 1))
+lIm = lIm.reshape(hIm.shape)
+print(lIm)
+
+print(np.min(lIm), np.max(lIm))
+print(np.min(hIm), np.max(hIm))
+
+
+# Display the downsampled image
+# cv2.imshow('High Resolution Image', hIm)
+# cv2.imshow('Low Resolution Image', lIm)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
+
+plt.imshow(lIm, cmap='gray')
+plt.axis('off')  # Turn off axis
+plt.show()

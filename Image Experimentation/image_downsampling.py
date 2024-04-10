@@ -13,7 +13,7 @@ lIm = cv2.resize(hIm, tuple(int(x * (1/upscale)) for x in hIm.shape)[::-1], inte
 print(lIm.shape)
 
 lIm = cv2.resize(lIm, hIm.shape[::-1], interpolation = cv2.INTER_CUBIC)
-print(lIm.shape)
+print(lIm)
 
 # Display the downsampled image
 cv2.imshow('High Resolution Image', hIm)
