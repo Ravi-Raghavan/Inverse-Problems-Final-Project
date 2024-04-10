@@ -1,6 +1,7 @@
 ### Experimenting Around with Algorithm 2
 import numpy as np
 import cv2
+from scipy.sparse import csr_matrix
 
 #I: Image/Array
 #patch_shape: shape of patch
@@ -83,7 +84,7 @@ def generate_w(X0: np.ndarray, patch_shape: tuple, stride, patch_num):
 #Dh: Dictionary for High Resolution Patches
 #Dl: Dictionary with Feature Vectors for each Vectorized Upsampled Low Resolution Patch
 #Y: Low Resolution Image
-def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray):
+def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray):
     #Dh is a matrix of size N x Kh where N is the size of each vectorized high resolution patch
     #Dl is a matrix of size M x Kl where M is the size of the corresponding feature vector for each vectorized, upsampled low resolution patch
     N, _ = Dh.shape
@@ -132,7 +133,8 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray):
         
         print(f"Finished Processing Patch # {patch_num + 1}")
     
-    return X0   
+    X = GD(Y, X0, 0.001, 0.01, 100, blur_kernel)
+    return X   
         
         
 #prox operator
@@ -156,20 +158,85 @@ def proximal_GD(D_tilde: np.ndarray, y_tilde: np.ndarray, step_size, lamb, itera
     
     return a
 
-def blur(X):
-    return cv2.GaussianBlur(X, (15, 15), 0)
+#Downsample an Image of size M X N
+def downsample(M, N):
+    downsample_matrix = np.eye(M * N)
+    
+    data = np.ones(M * N)
+    rows = np.arange(M * N)
+    
+    cols = np.repeat(np.arange(start = 0, stop = N, step = 2), 2)[np.newaxis, :] + (N * (np.arange(start = 0, stop = M, step = 2)[:, np.newaxis]))
+    cols = np.repeat(cols, 2, axis = 0) 
+    cols = cols.flatten()
+    
+    print(len(data), len(rows), len(cols))
+    downsample_matrix = csr_matrix((data, (rows, cols)), shape = (M * N, M * N))
+    return downsample_matrix
 
-def downsample(X, upscale):
-    lIm = cv2.resize(X, tuple(int(x * (1/upscale)) for x in X.shape)[::-1], interpolation = cv2.INTER_CUBIC)
-    lIm = cv2.resize(lIm, X.shape[::-1], interpolation = cv2.INTER_CUBIC)
-    return lIm
+#I: Image is assumed to be of size (Mi, Ni)
+#K: Kernel is assumed to be of size (Mk, Nk)
+def pad_image(image: np.ndarray, kernel: np.ndarray):
+    Mk, Nk = kernel.shape
+    
+    #Add Mk - 1 Padding row-wise. Add Nk - 1 padding column wise
+    image = np.vstack([image, np.zeros((Mk - 1, image.shape[1]))])    
+    image = np.hstack([image, np.zeros((image.shape[0], Nk - 1))])
+    
+    return image
+
+#I: Image is assumed to be of size (Mi, Ni)
+#K: Kernel is assumed to be of size (Mk, Nk)
+def convolution_matrix_fast(Mi, Ni, kernel: np.ndarray):
+    Mk, Nk = kernel.shape
+    
+    kernel_flat = kernel.flatten(order = 'C')
+    data = np.tile(kernel_flat, (Mi - Mk + 1) * (Ni - Nk + 1))
+    rows = np.repeat(np.arange((Mi - Mk + 1) * (Ni - Nk + 1)), Mk * Nk)
+    
+    f = np.arange(Nk)[np.newaxis, :] + Ni * (np.arange(Mk)[:, np.newaxis])
+    f = f.flatten(order = 'C')
+    
+    f = f[np.newaxis, :] + np.arange(Ni - Nk + 1)[:, np.newaxis]
+    f = f.flatten(order = 'C')
+    
+    f = f[np.newaxis, :] + Ni * (np.arange(Mi - Mk + 1)[:, np.newaxis])
+    f = f.flatten(order = 'C')
+    cols = f
+    
+    F = csr_matrix((data, (rows, cols)), shape = ((Mi - Mk + 1) * (Ni - Nk + 1), Ni * Mi)) #generate the convolution matrix via sparse matrix representation
+    return F
         
-def GD(Y: np.ndrray, X0: np.ndarray, step_size, c, iterations):
+def GD(Y: np.ndarray, X0: np.ndarray, step_size, c, iterations, blur_kernel):
+    Mi, Ni = X0.shape
+    S = downsample(Mi, Ni)
+    
+    Mk, Nk = blur_kernel.shape
+    H = convolution_matrix_fast(Mi + Mk - 1, Ni + Nk - 1, blur_kernel)
+    
+    print(S.shape, H.shape, X0.shape, Y.shape)
+    
     X = X0
-    for _ in range(iterations):
-        B = c * (X - X0)
-        A = Y - downsample(blur(X), 2)
-        X += step_size * ()
+    
+    X0_padded = pad_image(X0, blur_kernel)
+    X_padded = pad_image(X, blur_kernel)
+    
+    padded_matrix_shape = X0_padded.shape
+    
+    Y_reshaped = Y.reshape((-1, 1))
+    X0_padded = X0_padded.reshape((-1, 1))
+    X_padded = X_padded.reshape((-1, 1))
+    print(X_padded.shape)
+    
+    for iter in range(iterations):
+        B = c * (X_padded - X0_padded)
+        Q = (H.T @ S.T @ (Y_reshaped - (S @ H @ X_padded))) + (c * (X_padded - X0_padded))
+        X_padded += step_size * Q
+        
+        print(f"Iteration {iter + 1} of GD Finished")
+    
+    X_padded = X_padded.reshape(padded_matrix_shape)
+    X = X_padded[0: Mi, 0: Ni]
+    return X
 
 #Test Patch Extraction
 # Define the values for the array
@@ -193,6 +260,6 @@ Dh = np.random.normal(size = (9, 512))
 Dl = np.random.normal(size = (9, 512)) #since we are only using 1 1D filter for now, set to 9
 Y = np.random.normal(size = (100, 100))
 
-X = SR(Dh, Dl, Y)
+X = SR(Dh, Dl, Y, np.ones(shape = (3, 3)) / 9)
 
 print(np.linalg.norm(Y - X) ** 2 / np.linalg.norm(Y) ** 2)

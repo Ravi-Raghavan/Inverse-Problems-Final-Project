@@ -74,10 +74,6 @@ def convolution_matrix_fast(image: np.ndarray, kernel: np.ndarray):
     # output = output[start_row : start_row + original_Mi, start_col : start_col + original_Ni]
     return F, output
 
-def downsample():
-    
-    pass
-
 start = time.time()
 
 image = np.ones(shape = (512, 512))
