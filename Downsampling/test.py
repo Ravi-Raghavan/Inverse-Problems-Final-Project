@@ -20,3 +20,8 @@ def downsample(image: np.ndarray):
 
 
 image = np.random.randn(512, 512)
+
+downsample_matrix = downsample(image)
+
+downsampled_image = downsample_matrix @ image.reshape((-1, 1))
+downsampled_image = downsampled_image.reshape(image.shape)
