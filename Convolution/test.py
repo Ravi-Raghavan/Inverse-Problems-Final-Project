@@ -1,6 +1,7 @@
 #Test Class to represent Convolution as a Matrix Operation
 import numpy as np
 from scipy.sparse import csr_matrix
+import time
 
 #I: Image is assumed to be of size (Mi, Ni)
 #K: Kernel is assumed to be of size (Mk, Nk)
@@ -24,13 +25,21 @@ def convolution_matrix(image: np.ndarray, kernel: np.ndarray):
         E[:, (idx * Ni) : ((idx + Mk) * Ni)] = D
         F[(idx * (Ni - Nk + 1)) : ((idx + 1) * (Ni - Nk + 1)), :] = E
     
-    print(F.shape)
+    return F
     
 #I: Image is assumed to be of size (Mi, Ni)
 #K: Kernel is assumed to be of size (Mk, Nk)
 def convolution_matrix_fast(image: np.ndarray, kernel: np.ndarray):
+    original_Mi, original_Ni = image.shape
     Mi, Ni = image.shape
     Mk, Nk = kernel.shape
+    
+    #Add Mk - 1 Padding row-wise. Add Nk - 1 padding column wise
+    # image = np.vstack([np.zeros((Mk - 1, image.shape[1])), image, np.zeros((Mk - 1, image.shape[1]))])    
+    # image = np.hstack([np.zeros((image.shape[0], Nk - 1)), image, np.zeros((image.shape[0], Nk - 1))])
+    
+    #Recalculate Mi and Ni
+    Mi, Ni = image.shape
     
     #Reshape image into column vector
     image = image.reshape((-1, 1))
@@ -49,14 +58,27 @@ def convolution_matrix_fast(image: np.ndarray, kernel: np.ndarray):
     f = f.flatten(order = 'C')
     cols = f
     
-    F = csr_matrix((data, (rows, cols)), shape = ((Mi - Mk + 1) * (Ni - Nk + 1), Ni * Mi))
-    print(len(data), len(rows), len(cols)) 
+    F = csr_matrix((data, (rows, cols)), shape = ((Mi - Mk + 1) * (Ni - Nk + 1), Ni * Mi)) #generate the convolution matrix via sparse matrix representation
     
     output = F @ image #compute output
     
     #Reshape output back into a matrix
     output = output.reshape(Mi - Mk + 1, Ni - Nk + 1)
-    return output
+    
+    # # Calculate the starting row and column indices for the middle chunk
+    # output_M, output_N = output.shape
+    # start_row = (output_M - original_Mi) // 2
+    # start_col = (output_N - original_Ni) // 2
+    
+    # # Extract the middle chunk corresponding to image size
+    # output = output[start_row : start_row + original_Mi, start_col : start_col + original_Ni]
+    return F, output
+
+def downsample():
+    
+    pass
+
+start = time.time()
 
 image = np.ones(shape = (512, 512))
 
@@ -64,7 +86,16 @@ kernel = np.array([[1, 2, 3],
                    [4, 5, 6],
                    [7, 8, 9]])
 
-convolution_matrix_fast(image, kernel)
-            
-    
-    
+F, output = convolution_matrix_fast(image, kernel)
+print(F.shape)
+
+F = F.T
+print(F.shape)
+
+print(output.shape)
+
+end = time.time()
+
+# Calculate the elapsed time
+elapsed_time = end - start
+print("Elapsed Time:", elapsed_time, "seconds")
