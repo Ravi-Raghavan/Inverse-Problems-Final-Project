@@ -93,7 +93,7 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray):
     beta = 1
     
     #Patch size that will be used to extract patches from low resolution image
-    patch_shape = (3, 3)
+    patch_shape = (10, 10)
     patch_size = patch_shape[0] * patch_shape[1]
     stride = patch_shape[0] - 1
     
@@ -109,7 +109,7 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray):
     
     print(f"Total Patches: {total_patches}")
     for patch_num in range(total_patches):
-        y = extract_patch(Y, (3, 3), 2, patch_num).flatten(order = 'F').reshape((-1, 1))
+        y = extract_patch(Y, patch_shape, 2, patch_num).flatten(order = 'F').reshape((-1, 1))
         #Normalize to have 0 mean
         m = np.mean(y)
         y -= m
@@ -119,16 +119,20 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray):
         y_tilde = F @ y
         
         if patch_num > 0:
-            P = generate_P(X0, (3, 3), 2, patch_num)
-            w = generate_w(X0, (3, 3), 2, patch_num).reshape((-1, 1)) #make w a column vector
+            # P = generate_P(X0, patch_shape, 2, patch_num)
+            P = generate_P(X0, (5, 5), 2, patch_num)
+            # w = generate_w(X0, patch_shape, 2, patch_num).reshape((-1, 1)) #make w a column vector
+            w = generate_w(X0, (5, 5), 2, patch_num).reshape((-1, 1)) #make w a column vector
             
             D_tilde = np.concatenate((D_tilde, beta * (P @ Dh)), axis = 0)
             y_tilde = np.concatenate((y_tilde, beta * w), axis = 0)
         
         a = proximal_GD(D_tilde, y_tilde, 0.001, 0.1, 10) 
         x = Dh @ a + m
-        x = x.reshape(patch_shape, order = 'F')
-        insert_patch(X0, patch_shape, stride, patch_num, x)
+        # x = x.reshape(patch_shape, order = 'F')
+        x = x.reshape((5, 5), order = 'F')
+        # insert_patch(X0, patch_shape, stride, patch_num, x)
+        insert_patch(X0, (5, 5), stride, patch_num, x)
         
         print(f"Finished Processing Patch # {patch_num + 1}")
     
@@ -187,18 +191,47 @@ for patch_num in range(4):
     print(extract_patch(A, (3, 3), 2, patch_num))
     
 
-#Run a brief test of SR Algorithm with Dummy Matrices
-#Let's say we were working with 3 x 3 patches from the High Resolution Image and the Upsampled, Low Resolution Image
-Dh = np.random.normal(size = (9, 512))
-Dl = np.random.normal(size = (9, 512)) #since we are only using 1 1D filter for now, set to 9
-Y = np.random.normal(size = (100, 100))
+# #Run a brief test of SR Algorithm with Dummy Matrices
+# #Let's say we were working with 3 x 3 patches from the High Resolution Image and the Upsampled, Low Resolution Image
+# Dh = np.random.normal(size = (9, 512))
+# Dl = np.random.normal(size = (9, 512)) #since we are only using 1 1D filter for now, set to 9
+# Y = np.random.normal(size = (100, 100))
 
-X0 = SR(Dh, Dl, Y)
+# X0 = SR(Dh, Dl, Y)
 
+# Xstar = reconstruction_GD(X0, Y, 0.1, 10)
+
+# print(Xstar.shape)
+# print(Y.shape)
+
+# print("MSE before:", np.linalg.norm(Y - X0) ** 2 / np.linalg.norm(Y) ** 2)
+# print("MSE after:", np.linalg.norm(Y - Xstar) ** 2 / np.linalg.norm(Y) ** 2)
+
+
+Dh = np.load("../Dictionaries/Dh_512_0.15_5.npy")
+Dl = np.load("../Dictionaries/Dl_512_0.15_5.npy")
+
+print(Dh.shape)
+print(Dl.shape)
+
+
+image = cv2.imread('../test.jpeg', cv2.IMREAD_GRAYSCALE)
+
+# print(image.shape)
+Y = cv2.resize(image, (256, 256))
+Y_upscaled = cv2.resize(Y, image.shape)
+# cv2.imshow('High Resolution Image', image)
+# cv2.imshow('Low Resolution Image', Y_upscaled)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
+
+X0 = SR(Dh, Dl, Y_upscaled.astype(np.float64))
+
+print(X0.shape)
 Xstar = reconstruction_GD(X0, Y, 0.1, 10)
 
-print(Xstar.shape)
-print(Y.shape)
-
-print("MSE before:", np.linalg.norm(Y - X0) ** 2 / np.linalg.norm(Y) ** 2)
-print("MSE after:", np.linalg.norm(Y - Xstar) ** 2 / np.linalg.norm(Y) ** 2)
+cv2.imshow('Original Image', image)
+cv2.imshow('Super Resolution Image', Xstar)
+cv2.imshow('Upscaled Low Resolution Image', Y_upscaled)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
