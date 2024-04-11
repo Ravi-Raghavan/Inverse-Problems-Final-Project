@@ -5,17 +5,20 @@ from sample_patches import sample_patches
 import random
 
 #Randomly Sample Patches
+#img_path: path of image
+#img_type: type of image
+#patch_size: size of patch
 #num_patch: number of patches we want to sample
+#upscale: upscale factor
 def rnd_smp_patch(img_path, img_type, patch_size, num_patch, upscale):
     img_dir = [file for file in os.listdir(img_path) if file.endswith(img_type)]
-    img_dir = random.sample(img_dir, 2)
-    
+        
     Xh = [] #Store High Resolution Patches
     Xl = [] #Store Low Resolution Patches
     
     img_num = len(img_dir) #Total number of images
-    print("Number of Images: ", img_num)
     nper_img = np.zeros(shape = (img_num, ))
+    print("Number of Images From Training Dataset we have Sampled: ", img_num)
     
     for idx in range(img_num):
         im = cv2.imread(os.path.join(img_path, img_dir[idx]))

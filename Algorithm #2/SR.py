@@ -167,7 +167,7 @@ def downsample(M, N):
     
     cols = np.repeat(np.arange(start = 0, stop = N, step = 2), 2)[np.newaxis, :] + (N * (np.arange(start = 0, stop = M, step = 2)[:, np.newaxis]))
     cols = np.repeat(cols, 2, axis = 0) 
-    cols = cols.flatten()
+    cols = cols.flatten(order = 'C')
     
     print(len(data), len(rows), len(cols))
     downsample_matrix = csr_matrix((data, (rows, cols)), shape = (M * N, M * N))

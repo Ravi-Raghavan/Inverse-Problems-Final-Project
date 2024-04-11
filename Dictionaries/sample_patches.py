@@ -32,7 +32,8 @@ def sample_patches(im, patch_size, patch_num, upscale):
     patch_num = len(xrow)
     
     H = np.zeros(shape = (patch_size ** 2, patch_num))
-    L = np.zeros(shape = (4 * (patch_size ** 2), patch_num))
+    # L = np.zeros(shape = (4 * (patch_size ** 2), patch_num))
+    L = np.zeros(shape = ((patch_size ** 2), patch_num))
     
     #Compute first order derivatives
     hf1 = np.array([-1,0,1]).reshape((1, -1))
@@ -57,11 +58,12 @@ def sample_patches(im, patch_size, patch_num, upscale):
         
         #Get the patch from Low Resolution Image
         Lpatch1 = lImG11[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
-        Lpatch2 = lImG12[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
-        Lpatch3 = lImG21[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
-        Lpatch4 = lImG22[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
+        # Lpatch2 = lImG12[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
+        # Lpatch3 = lImG21[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
+        # Lpatch4 = lImG22[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
 
-        Lpatch = np.concatenate((Lpatch1, Lpatch2, Lpatch3, Lpatch4))
+        # Lpatch = np.concatenate((Lpatch1, Lpatch2, Lpatch3, Lpatch4))
+        Lpatch = Lpatch1
         L[:, idx] = Lpatch
     
     return H, L
