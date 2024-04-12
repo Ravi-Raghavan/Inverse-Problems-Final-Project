@@ -162,7 +162,7 @@ def proximal_GD(D_tilde: np.ndarray, y_tilde: np.ndarray, step_size, lamb, itera
 
 #Downsample an Image of size M X N
 def downsample(M, N):
-    downsample_matrix = np.eye(M * N)
+    # downsample_matrix = np.eye(M * N)
     
     data = np.ones(M * N)
     rows = np.arange(M * N)
