@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 from scipy.sparse import csr_matrix
 import matplotlib.pyplot as plt
+from scipy.signal import convolve2d
 
 #I: Image/Array
 #patch_shape: shape of patch
@@ -261,7 +262,7 @@ Dh = np.load("../Dictionaries/Dh.npy")
 Dl = np.load("../Dictionaries/Dl.npy")\
 
 # Load an image using OpenCV
-image = cv2.imread('../Data/Testing/IC.png')
+image = cv2.imread('../Data/Testing/Child.png')
 lIm = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
 
 image = cv2.imread("../Data/Testing/Child_gnd.bmp")
@@ -277,7 +278,7 @@ print("Finished Super Resolution")
 
 # Plot the matrix as an image
 # Create a figure with subplots
-fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
+fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
 
 axes[0].imshow(X, cmap='gray')  # You can choose different colormaps ('gray' for grayscale)
 axes[0].set_title('SuperResolution Image')  # Set title
@@ -288,6 +289,11 @@ axes[1].imshow(lIm, cmap='gray')  # You can choose different colormaps ('gray' f
 axes[1].set_title('Original Low Resolution Image')  # Set title
 axes[1].set_xlabel('Columns')  # Set label for x-axis
 axes[1].set_ylabel('Rows')  # Set label for y-axis
+
+axes[2].imshow(hIm, cmap='gray')  # You can choose different colormaps ('gray' for grayscale)
+axes[2].set_title('Correct High Resolution Image')  # Set title
+axes[2].set_xlabel('Columns')  # Set label for x-axis
+axes[2].set_ylabel('Rows')  # Set label for y-axis
 
 plt.tight_layout()  # Adjust layout to prevent overlap
 plt.show()  # Display the figure with subplots
