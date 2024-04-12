@@ -1,53 +1,9 @@
+### File to Jointly Train Dictionaries
 import numpy as np
 from scipy.optimize import minimize
+from scipy.sparse import csr_matrix
 
-def objective_function_Z(Z_flat, X, D, lamb):
-    Z = Z_flat.reshape(D.shape[1], X.shape[1])
-    residual = X - D @ Z
-    l2_norm = np.linalg.norm(residual)**2
-    l1_norm = lamb * np.sum(np.abs(Z))
-    return l2_norm + l1_norm
-
-def objective_function_D(D_flat, X, Z):
-    D = D_flat.reshape(X.shape[0], Z.shape[0])
-    residual = X - D @ Z
-    return np.linalg.norm(residual)**2
-
-def constraint_function_D(D_flat, X, Z):
-    D = D_flat.reshape(X.shape[0], Z.shape[0])
-    return 1 - np.sum(np.square(np.linalg.norm(D, axis=0)))
-
-def linear_programming_subroutine(Xc, Dc, lamb):
-    print("Beginning Linear Programming Subroutine")
-    Z0 = np.zeros(Dc.shape[1] * Xc.shape[1])
-    
-    # Minimize the objective function
-    result = minimize(objective_function_Z, Z0, args=(Xc, Dc, lamb), method='BFGS')
-
-    # Extract the optimal Z
-    optimal_Z = result.x.reshape(Dc.shape[1], Xc.shape[1])
-    return optimal_Z
-
-def quadratic_programming_subroutine(Xc, Z):
-    print("Beginning Quadratic Programming Subroutine")
-    
-    # Initial guess for D
-    D0 = np.random.rand(Xc.shape[0] * Z.shape[0])
-
-    # Define the constraint dictionary
-    cons = []
-    for idx in range(Z.shape[0]):
-        constraint = {'type': 'ineq', 'args': (Xc, Z),  'fun': lambda D_flat, X, Z: 1 - (np.square(np.linalg.norm(D_flat.reshape(X.shape[0], Z.shape[0]), axis = 0)))[idx]}
-        cons.append(constraint)
-    
-    # Minimize the objective function subject to the constraint
-    result = minimize(objective_function_D, D0, args=(Xc, Z), constraints = cons)
-
-    # Extract the optimal D
-    optimal_D = result.x.reshape(Xc.shape[0], Z.shape[0])
-    return optimal_D
-
-def train_coupled_dict(Xh, Xl, dict_size, lamb):
+def train_coupled_dict(Xh, Xl, dict_size, step_size, lamb, threshold):
     print("STARTING TRAINING")
     N, M = Xh.shape[0], Xl.shape[0]
     
@@ -60,14 +16,79 @@ def train_coupled_dict(Xh, Xl, dict_size, lamb):
     
     #Initialize D as a random Gaussian Matrix
     Dc = np.random.normal(size = (N + M, dict_size))
-    column_norms = np.linalg.norm(Dc, axis=0, keepdims = True)
-    Dc = Dc / column_norms
+    Dc = normalize(Dc)
     print(f"Dc shape: {Dc.shape}")
     
-    #cap maximum iterations at 5000
-    for iter in range(5000):
-        print("-------------------------------------------")
-        Z_star = linear_programming_subroutine(Xc, Dc, lamb)
-        D_star = quadratic_programming_subroutine(Xc, Z_star)
-        Dc = D_star
-        print(f"Completed Iteration: {iter + 1}")
+    #cap maximum iterations at 100
+    for iter in range(100):
+        Z = linear_programming(Xc, Dc, Dc.shape[1], Xc.shape[1], step_size, lamb, threshold, 100)
+        Dc = quadratic_programming(Xc, Z, Dc.shape[0], Dc.shape[1], step_size, threshold, 100)
+        print(f"Completed Iteration {iter + 1}/100")
+    
+    return Dc
+        
+#prox operator
+def prox(x, alpha):
+    return np.piecewise(x, [x < -alpha, (x >= -alpha) & (x <= alpha), x >= alpha], [lambda x: x + alpha, 0, lambda x: x - alpha])
+
+## Solve the Linear Programming Portion of Joint Dictionary Training
+## Goal: Find Z that minimizes || X - DZ||_2^2 + lambda * ||Z||_1
+def linear_programming(X: np.ndarray, D: np.ndarray, Zr, Zc, step_size, lamb, threshold, max_iter):
+    Z = np.random.normal(size = (Zr, Zc))
+    
+    #Run Proximal Gradient Descent
+    loss = (np.linalg.norm(X - (D @ Z)) ** 2) + (lamb * np.sum(np.abs(Z)))
+    
+    for iter in range(max_iter):
+        grad = (-2 * (D.T @ X)) + (2 * (D.T @ D @ Z))
+        
+        #Update Z
+        Z = Z - (step_size * grad)
+        Z = prox(Z, step_size * lamb)
+        
+        loss = (np.linalg.norm(X - (D @ Z)) ** 2) + (lamb * np.sum(np.abs(Z)))
+        if np.linalg.norm(grad) <= threshold:
+            break
+    
+    print(f"Loss at Iteration {iter} = {loss}, Magnitude of Gradient = {np.linalg.norm(grad)}")
+    return Z
+
+def normalize(D: np.ndarray):
+    column_norms = np.linalg.norm(D, axis=0, keepdims = True)
+    normalized_matrix = D / np.maximum(column_norms, 1)
+    return normalized_matrix
+
+def quadratic_programming(X: np.ndarray, Z: np.ndarray, Dr, Dc, step_size, threshold, max_iter):    
+    #Run Projected Gradient Descent
+    D = np.random.normal(size = (Dr, Dc))
+    D = normalize(D)
+    loss = (np.linalg.norm(X - (D @ Z)) ** 2)
+    
+    for iter in range(max_iter):
+        grad = (-2 * (X @ Z.T)) + (2 * (D @ Z @ Z.T))
+        
+        D = D - (step_size * grad)
+        D = normalize(D)
+        loss = (np.linalg.norm(X - (D @ Z)) ** 2)
+        
+        if np.linalg.norm(grad) <= threshold:
+            break
+    
+    print(f"Loss at Iteration {iter} = {loss}, Magnitude of Gradient = {np.linalg.norm(grad)}")
+    return D
+    
+
+# D = np.random.normal(size = (25, 512))
+# Z = np.random.normal(size = (512, 30))
+# X = D @ Z
+
+# print("Testing Linear Programming")
+# linear_programming(X, D, Z.shape[0], Z.shape[1], 0.001, 0, 0.0001, 100)
+
+# print("Testing Quadratic Programming")
+# D = np.random.normal(size = (25, 512))
+# D = normalize(D)
+
+# Z = np.random.normal(size = (512, 30))
+# X = D @ Z
+# quadratic_programming(X, Z, D.shape[0], D.shape[1], 0.001, 0.0001, 100)

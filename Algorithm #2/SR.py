@@ -2,6 +2,7 @@
 import numpy as np
 import cv2
 from scipy.sparse import csr_matrix
+import matplotlib.pyplot as plt
 
 #I: Image/Array
 #patch_shape: shape of patch
@@ -256,10 +257,37 @@ for patch_num in range(4):
 
 #Run a brief test of SR Algorithm with Dummy Matrices
 #Let's say we were working with 3 x 3 patches from the High Resolution Image and the Upsampled, Low Resolution Image
-Dh = np.random.normal(size = (9, 512))
-Dl = np.random.normal(size = (9, 512)) #since we are only using 1 1D filter for now, set to 9
-Y = np.random.normal(size = (100, 100))
+Dh = np.load("../Dictionaries/Dh.npy")
+Dl = np.load("../Dictionaries/Dl.npy")\
 
-X = SR(Dh, Dl, Y, np.ones(shape = (3, 3)) / 9)
+# Load an image using OpenCV
+image = cv2.imread('../Data/Testing/IC.png')
+lIm = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
 
-print(np.linalg.norm(Y - X) ** 2 / np.linalg.norm(Y) ** 2)
+image = cv2.imread("../Data/Testing/Child_gnd.bmp")
+hIm = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
+
+lIm = cv2.resize(lIm, hIm.shape[::-1], interpolation = cv2.INTER_NEAREST)
+
+print(lIm.shape)
+
+X = SR(Dh, Dl, lIm, np.ones(shape = (3, 3)) / 9)
+
+print("Finished Super Resolution")
+
+# Plot the matrix as an image
+# Create a figure with subplots
+fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
+
+axes[0].imshow(X, cmap='gray')  # You can choose different colormaps ('gray' for grayscale)
+axes[0].set_title('SuperResolution Image')  # Set title
+axes[0].set_xlabel('Columns')  # Set label for x-axis
+axes[0].set_ylabel('Rows')  # Set label for y-axis
+
+axes[1].imshow(lIm, cmap='gray')  # You can choose different colormaps ('gray' for grayscale)
+axes[1].set_title('Original Low Resolution Image')  # Set title
+axes[1].set_xlabel('Columns')  # Set label for x-axis
+axes[1].set_ylabel('Rows')  # Set label for y-axis
+
+plt.tight_layout()  # Adjust layout to prevent overlap
+plt.show()  # Display the figure with subplots
