@@ -128,7 +128,7 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray):
             D_tilde = np.concatenate((D_tilde, beta * (P @ Dh)), axis = 0)
             y_tilde = np.concatenate((y_tilde, beta * w), axis = 0)
         
-        a = proximal_GD(D_tilde, y_tilde, 0.001, 0.1, 10) 
+        a = proximal_GD(D_tilde, y_tilde, 0.001, 0.1, 100) 
         x = Dh @ a + m
         x = x.reshape(patch_shape, order = 'F')
         insert_patch(X0, patch_shape, stride, patch_num, x)
@@ -259,7 +259,9 @@ for patch_num in range(4):
 #Run a brief test of SR Algorithm with Dummy Matrices
 #Let's say we were working with 3 x 3 patches from the High Resolution Image and the Upsampled, Low Resolution Image
 Dh = np.load("../Dictionaries/Dh.npy")
-Dl = np.load("../Dictionaries/Dl.npy")\
+Dl = np.load("../Dictionaries/Dl.npy")
+
+print(Dh.shape, Dl.shape)
 
 # Load an image using OpenCV
 image = cv2.imread('../Data/Testing/Child.png')
