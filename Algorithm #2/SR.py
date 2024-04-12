@@ -259,7 +259,9 @@ for patch_num in range(4):
 #Run a brief test of SR Algorithm with Dummy Matrices
 #Let's say we were working with 3 x 3 patches from the High Resolution Image and the Upsampled, Low Resolution Image
 Dh = np.load("../Dictionaries/Dh.npy")
-Dl = np.load("../Dictionaries/Dl.npy")\
+Dl = np.load("../Dictionaries/Dl.npy")
+
+print(Dh.shape, Dl.shape)
 
 # Load an image using OpenCV
 image = cv2.imread('../Data/Testing/Child.png')
