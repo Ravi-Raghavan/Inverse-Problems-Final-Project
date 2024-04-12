@@ -128,7 +128,7 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray):
             D_tilde = np.concatenate((D_tilde, beta * (P @ Dh)), axis = 0)
             y_tilde = np.concatenate((y_tilde, beta * w), axis = 0)
         
-        a = proximal_GD(D_tilde, y_tilde, 0.001, 0.1, 10) 
+        a = proximal_GD(D_tilde, y_tilde, 0.001, 0.1, 100) 
         x = Dh @ a + m
         x = x.reshape(patch_shape, order = 'F')
         insert_patch(X0, patch_shape, stride, patch_num, x)
