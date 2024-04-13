@@ -135,7 +135,7 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray):
         
         print(f"Finished Processing Patch # {patch_num + 1}")
     
-    X = GD(Y, X0, 0.001, 0.01, 100, blur_kernel)
+    X = GD(Y, X0, 0.001, 0, 100, blur_kernel)
     return X   
         
         
@@ -277,6 +277,11 @@ print(lIm.shape)
 X = SR(Dh, Dl, lIm, np.ones(shape = (3, 3)) / 9)
 
 print("Finished Super Resolution")
+
+#Save X, lIm, and hIm to npy files
+np.save('X.npy', X)
+np.save('lIm.npy', lIm)
+np.save('hIm.npy', hIm)
 
 # Plot the matrix as an image
 # Create a figure with subplots
