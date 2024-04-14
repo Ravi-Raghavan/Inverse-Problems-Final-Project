@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 from scipy import signal
+from scipy.signal import convolve2d
+
 
 ## File to Sample Patches from Image
 def sample_patches(im, patch_size, patch_num, upscale):
@@ -9,10 +11,16 @@ def sample_patches(im, patch_size, patch_num, upscale):
     if im.shape[2] == 3:
         hIm = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
         
+    #Blur the High Resolution Image a bit
+    blur_kernel = np.ones(shape = (3, 3)) / 9
+    blurred_hIm = convolve2d(hIm, blur_kernel, mode = 'same')
+        
     #Generate Low Resolution Image
-    lIm = cv2.resize(hIm, tuple(int(x * (1/upscale)) for x in hIm.shape)[::-1], interpolation = cv2.INTER_CUBIC)
-    lIm = cv2.resize(lIm, hIm.shape[::-1], interpolation = cv2.INTER_CUBIC)
-    nrow, ncol = hIm.shape #Get dimensions of hIm
+    lIm = cv2.resize(blurred_hIm, tuple(int(x * (1/upscale)) for x in blurred_hIm.shape)[::-1], interpolation = cv2.INTER_NEAREST)
+    lIm = cv2.resize(lIm, blurred_hIm.shape[::-1], interpolation = cv2.INTER_NEAREST)
+    
+    #Get dimensions of hIm
+    nrow, ncol = hIm.shape
     
     #Get posible values of (x, y) that is top left corner of patch
     x = np.random.permutation(np.arange(0, nrow - 2 * patch_size - 1)) + patch_size
@@ -33,7 +41,8 @@ def sample_patches(im, patch_size, patch_num, upscale):
     
     H = np.zeros(shape = (patch_size ** 2, patch_num))
     # L = np.zeros(shape = (4 * (patch_size ** 2), patch_num))
-    L = np.zeros(shape = ((patch_size ** 2), patch_num))
+    # L = np.zeros(shape = ((patch_size ** 2), patch_num))
+    L = np.zeros(shape = (2 * (patch_size ** 2), patch_num))
     
     #Compute first order derivatives
     hf1 = np.array([-1,0,1]).reshape((1, -1))
@@ -58,12 +67,13 @@ def sample_patches(im, patch_size, patch_num, upscale):
         
         #Get the patch from Low Resolution Image
         Lpatch1 = lImG11[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
-        # Lpatch2 = lImG12[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
+        Lpatch2 = lImG12[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
         # Lpatch3 = lImG21[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
         # Lpatch4 = lImG22[row:row+patch_size,col:col+patch_size].flatten(order = 'F')
 
         # Lpatch = np.concatenate((Lpatch1, Lpatch2, Lpatch3, Lpatch4))
-        Lpatch = Lpatch1
+        # Lpatch = Lpatch1
+        Lpatch = np.concatenate((Lpatch1, Lpatch2))
         L[:, idx] = Lpatch
     
     return H, L

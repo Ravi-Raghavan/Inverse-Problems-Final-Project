@@ -52,12 +52,13 @@ def generate_P(X0: np.ndarray, patch_shape: tuple, stride, patch_num):
     P = np.zeros(shape = (Kr * Kc, Kr * Kc))
     idx = []
     if (hStrip > 0 and vStrip > 0):
-        idx = [0, 1, 2, 3, 6]
+        idx = np.unique(np.concatenate(( Kr * np.arange(Kc), np.arange(Kr))))
     elif (hStrip > 0 and vStrip == 0):
-        idx = [0, 3, 6]
+        idx = Kr * np.arange(Kc)
     elif (hStrip == 0 and vStrip > 0):
-        idx = [0, 1, 2]
+        idx = np.arange(Kr)
     
+    idx = np.sort(idx)
     P[idx, idx] = 1
     return P
 
@@ -82,11 +83,28 @@ def generate_w(X0: np.ndarray, patch_shape: tuple, stride, patch_num):
     
     return patch.flatten(order = 'F')
 
+def gradient(patch_shape: tuple):    
+    patch_size = patch_shape[0] * patch_shape[1]
+    
+    data = np.tile(np.array([1, -1, 1, -1]), patch_shape[0])
+    
+    rows = [0, 1, 1, 2,  3, 4, 4, 5,  6, 7, 7, 8]
+    cols = [1, 0, 2, 1,  4, 3, 5, 4,  7, 6, 8, 7]
+    
+    return csr_matrix((data, (rows, cols)), shape = (patch_size, patch_size))
+
+def F(y: np.ndarray, patch_shape: tuple):
+    grad = gradient(patch_shape)
+    row_grad = grad @ y.reshape((-1, 1), order = 'C')
+    col_grad = grad @ y.reshape((-1, 1), order = 'F')
+    
+    return np.vstack((row_grad, col_grad))
+
 #Super Resolution via Sparse Representation
 #Dh: Dictionary for High Resolution Patches
 #Dl: Dictionary with Feature Vectors for each Vectorized Upsampled Low Resolution Patch
 #Y: Low Resolution Image
-def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray):
+def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray, upscale):
     #Dh is a matrix of size N x Kh where N is the size of each vectorized high resolution patch
     #Dl is a matrix of size M x Kl where M is the size of the corresponding feature vector for each vectorized, upsampled low resolution patch
     N, _ = Dh.shape
@@ -97,33 +115,28 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray):
     
     #Patch size that will be used to extract patches from low resolution image
     patch_shape = (3, 3)
-    patch_size = patch_shape[0] * patch_shape[1]
     stride = patch_shape[0] - 1
     
-    #We will be multiplying this with the approximate patches of the low resolution image to extract features
-    #This will be a row-wise gradient extractor
-    F = -1 * np.eye(patch_size)
-    indices = np.arange(patch_size)[:: patch_shape[0]]
-    insert_indices = indices + 2
-    F[indices, insert_indices] = 1
-    
+    #Set up the Approximation of the High Resolution Image
     X0 = np.zeros(shape = Y.shape) #approximation of high resolution image
     total_patches = (1 + int((Y.shape[0] - patch_shape[0]) / stride)) ** 2 #number of total patches in the low resolution image
     
     print(f"Total Patches: {total_patches}")
     for patch_num in range(total_patches):
-        y = extract_patch(Y, (3, 3), 2, patch_num).flatten(order = 'F').reshape((-1, 1))
+        #Extract patch from low resolution image
+        y = extract_patch(Y, patch_shape, stride, patch_num)
+        
         #Normalize to have 0 mean
         m = np.mean(y)
-        y -= m
+        # y -= m
         
         #Solve Optimization Problem Outlined in Equation (8)
         D_tilde = Dl
-        y_tilde = F @ y
+        y_tilde = F(y, patch_shape)
         
         if patch_num > 0:
-            P = generate_P(X0, (3, 3), 2, patch_num)
-            w = generate_w(X0, (3, 3), 2, patch_num).reshape((-1, 1)) #make w a column vector
+            P = generate_P(X0, patch_shape, stride, patch_num)
+            w = generate_w(X0, patch_shape, stride, patch_num).reshape((-1, 1)) #make w a column vector
             
             D_tilde = np.concatenate((D_tilde, beta * (P @ Dh)), axis = 0)
             y_tilde = np.concatenate((y_tilde, beta * w), axis = 0)
@@ -135,7 +148,7 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray):
         
         print(f"Finished Processing Patch # {patch_num + 1}")
     
-    X = GD(Y, X0, 0.001, 0, 100, blur_kernel)
+    X = GD(Y, X0, 0.001, 0, 100, blur_kernel, upscale)
     return X   
         
         
@@ -161,14 +174,28 @@ def proximal_GD(D_tilde: np.ndarray, y_tilde: np.ndarray, step_size, lamb, itera
     return a
 
 #Downsample an Image of size M X N
-def downsample(M, N):
-    # downsample_matrix = np.eye(M * N)
-    
+def downsample(M, N, upscale):    
     data = np.ones(M * N)
     rows = np.arange(M * N)
     
-    cols = np.repeat(np.arange(start = 0, stop = N, step = 2), 2)[np.newaxis, :] + (N * (np.arange(start = 0, stop = M, step = 2)[:, np.newaxis]))
-    cols = np.repeat(cols, 2, axis = 0) 
+    #compute cols for the first row
+    f_cols = np.repeat(np.array([0, upscale]), upscale // 2)[np.newaxis, :] + (upscale * (np.arange(start = 0, stop = (N // upscale) - 1, step = 1)[:, np.newaxis]))
+    f_cols = np.concatenate((f_cols.flatten(order = 'C'), np.repeat(np.array([N - upscale]), upscale)))
+    f_cols = f_cols[np.newaxis, :]
+    
+    #block set of cols
+    b_cols = np.repeat(f_cols, upscale // 2, axis = 0)
+    b_cols = b_cols.flatten(order = 'C')[np.newaxis, :]
+    print(b_cols.shape)
+    
+    #create a temp array
+    b_rows = np.array([0, upscale])[np.newaxis, :] + (upscale * (np.arange(start = 0, stop = (M // upscale) - 1, step = 1)[:, np.newaxis]))
+    b_rows = b_rows.flatten(order = 'C')
+    b_rows = np.concatenate((b_rows, np.array([b_rows[-1], b_rows[-1]])))
+    b_rows = b_rows[:, np.newaxis]
+    print(b_rows.shape)
+    
+    cols = b_cols + (N * b_rows)
     cols = cols.flatten(order = 'C')
     
     print(len(data), len(rows), len(cols))
@@ -208,9 +235,9 @@ def convolution_matrix_fast(Mi, Ni, kernel: np.ndarray):
     F = csr_matrix((data, (rows, cols)), shape = ((Mi - Mk + 1) * (Ni - Nk + 1), Ni * Mi)) #generate the convolution matrix via sparse matrix representation
     return F
         
-def GD(Y: np.ndarray, X0: np.ndarray, step_size, c, iterations, blur_kernel):
+def GD(Y: np.ndarray, X0: np.ndarray, step_size, c, iterations, blur_kernel, upscale):
     Mi, Ni = X0.shape
-    S = downsample(Mi, Ni)
+    S = downsample(Mi, Ni, upscale)
     
     Mk, Nk = blur_kernel.shape
     H = convolution_matrix_fast(Mi + Mk - 1, Ni + Nk - 1, blur_kernel)
@@ -240,41 +267,26 @@ def GD(Y: np.ndarray, X0: np.ndarray, step_size, c, iterations, blur_kernel):
     X = X_padded[0: Mi, 0: Ni]
     return X
 
-#Test Patch Extraction
-# Define the values for the array
-values = [
-    [1, 2, 3, 4, 5],
-    [6, 7, 8, 9, 10],
-    [11, 12, 13, 14, 15],
-    [16, 17, 18, 19, 20],
-    [21, 22, 23, 24, 25]
-]
-
-# Create a NumPy array from the values
-A = np.array(values)
-for patch_num in range(4):
-    print(extract_patch(A, (3, 3), 2, patch_num))
-    
-
-#Run a brief test of SR Algorithm with Dummy Matrices
+#Run SR Algorithm on a Test Low Resolution Image
 #Let's say we were working with 3 x 3 patches from the High Resolution Image and the Upsampled, Low Resolution Image
 Dh = np.load("../Dictionaries/Dh.npy")
 Dl = np.load("../Dictionaries/Dl.npy")
-
 print(Dh.shape, Dl.shape)
 
 # Load an image using OpenCV
-image = cv2.imread('../Data/Testing/Child.png')
-lIm = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
-
 image = cv2.imread("../Data/Testing/Child_gnd.bmp")
 hIm = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
 
-lIm = cv2.resize(lIm, hIm.shape[::-1], interpolation = cv2.INTER_NEAREST)
+image = cv2.imread('../Data/Testing/Child.png')
+lIm = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
+print(lIm.shape, hIm.shape)
 
-print(lIm.shape)
+lIm = cv2.resize(lIm, hIm.shape[::-1], interpolation = cv2.INTER_NEAREST).astype(np.float64)
+print(lIm.shape, hIm.shape)
 
-X = SR(Dh, Dl, lIm, np.ones(shape = (3, 3)) / 9)
+blur_kernel = np.ones(shape = (3, 3)) / 9
+upscale = 4.0
+X = SR(Dh, Dl, lIm, blur_kernel, upscale)
 
 print("Finished Super Resolution")
 
