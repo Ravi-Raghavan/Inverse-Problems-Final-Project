@@ -4,6 +4,8 @@ import cv2
 from scipy.sparse import csr_matrix
 import matplotlib.pyplot as plt
 from scipy.signal import convolve2d
+from sklearn import linear_model
+from tqdm import tqdm
 
 #I: Image/Array
 #patch_shape: shape of patch
@@ -106,11 +108,6 @@ def F(y: np.ndarray):
 #Dl: Dictionary with Feature Vectors for each Vectorized Upsampled Low Resolution Patch
 #Y: Low Resolution Image
 def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray, upscale):
-    #Dh is a matrix of size N x Kh where N is the size of each vectorized high resolution patch
-    #Dl is a matrix of size M x Kl where M is the size of the corresponding feature vector for each vectorized, upsampled low resolution patch
-    N, _ = Dh.shape
-    M, _ = Dl.shape
-    
     #This parameter was set to 1 in all the authors' experiments
     beta = 1
     
@@ -122,8 +119,7 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray, u
     X0 = np.zeros(shape = Y.shape) #approximation of high resolution image
     total_patches = (1 + int((Y.shape[0] - patch_shape[0]) / stride)) ** 2 #number of total patches in the low resolution image
     
-    print(f"Total Patches: {total_patches}")
-    for patch_num in range(total_patches):
+    for patch_num in tqdm(range(total_patches)):
         #Extract patch from low resolution image
         y = extract_patch(Y, patch_shape, stride, patch_num)
         
@@ -141,16 +137,21 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray, u
             D_tilde = np.concatenate((D_tilde, beta * (P @ Dh)), axis = 0)
             y_tilde = np.concatenate((y_tilde, beta * w), axis = 0)
         
-        a = proximal_GD(D_tilde, y_tilde, 0.001, 0.0001, 10) 
+        a = lasso_optimization(D_tilde, y_tilde, 0.1)
         x = Dh @ a + m
         x = x.reshape(patch_shape, order = 'F')
         insert_patch(X0, patch_shape, stride, patch_num, x)
         
-        print(f"Finished Processing Patch # {patch_num + 1}")
-    
-    X = GD(Y, X0, 0.001, 0.00001, 1000, blur_kernel, upscale)
-    return X   
-        
+    X = GD(Y, X0, 0.001, 0.00001, 2000, blur_kernel, upscale)
+    return X  
+
+#Lasso Optimization
+#Solves ||D_tilde a - y_tilde ||^2_2 + lambda ||a||_1
+def lasso_optimization(D_tilde, y_tilde, lamb):
+    clf = linear_model.Lasso(alpha = lamb, max_iter = 100000, fit_intercept = True)
+    clf.fit(D_tilde, y_tilde)
+    # print(f"R^2 Score: {clf.score(D_tilde, y_tilde)}")
+    return clf.coef_.reshape((-1, 1))
         
 #prox operator
 def prox(x, alpha):
@@ -276,37 +277,26 @@ def GD(Y: np.ndarray, X0: np.ndarray, step_size, c, iterations, blur_kernel, ups
 
 #Run SR Algorithm on a Test Low Resolution Image
 #Let's say we were working with 3 x 3 patches from the High Resolution Image and the Upsampled, Low Resolution Image
-Dh = np.load("../Dictionaries/Dh.npy")
-Dl = np.load("../Dictionaries/Dl.npy")
+Dh = np.load("../Dictionaries/Dh_512_0.15_5.npy")
+Dl = np.load("../Dictionaries/Dl_512_0.15_5.npy")
 print(Dh.shape, Dl.shape)
 
 # Load an image using OpenCV
-image = cv2.imread("../Data/Testing/Child_gnd.bmp")
-hIm = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
-
-image = cv2.imread('../Data/Testing/Child.png')
+image = cv2.imread("../Data/Testing/Child.png")
 lIm = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).astype(np.float64)
-print(lIm.shape, hIm.shape)
-
-lIm = cv2.resize(lIm, hIm.shape[::-1], interpolation = cv2.INTER_NEAREST).astype(np.float64)
-print(lIm.shape, hIm.shape)
 
 blur_kernel = np.ones(shape = (3, 3)) / 9
-upscale = 4.0
+upscale = 2.0
 X = SR(Dh, Dl, lIm, blur_kernel, upscale)
-
-#Normalize to be in range [0, 1]
-X = (X - X.min()) / (X.max() - X.min())
 print("Finished Super Resolution")
 
 #Save X, lIm, and hIm to npy files
 np.save('X.npy', X)
 np.save('lIm.npy', lIm)
-np.save('hIm.npy', hIm)
 
 # Plot the matrix as an image
 # Create a figure with subplots
-fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
+fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
 
 axes[0].imshow(X, cmap='gray')  # You can choose different colormaps ('gray' for grayscale)
 axes[0].set_title('SuperResolution Image')  # Set title
@@ -317,11 +307,6 @@ axes[1].imshow(lIm, cmap='gray')  # You can choose different colormaps ('gray' f
 axes[1].set_title('Original Low Resolution Image')  # Set title
 axes[1].set_xlabel('Columns')  # Set label for x-axis
 axes[1].set_ylabel('Rows')  # Set label for y-axis
-
-axes[2].imshow(hIm, cmap='gray')  # You can choose different colormaps ('gray' for grayscale)
-axes[2].set_title('Correct High Resolution Image')  # Set title
-axes[2].set_xlabel('Columns')  # Set label for x-axis
-axes[2].set_ylabel('Rows')  # Set label for y-axis
 
 plt.tight_layout()  # Adjust layout to prevent overlap
 plt.show()  # Display the figure with subplots
