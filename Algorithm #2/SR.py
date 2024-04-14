@@ -126,9 +126,8 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray, u
         #Extract patch from low resolution image
         y = extract_patch(Y, patch_shape, stride, patch_num)
         
-        #Normalize to have 0 mean
+        #Calculate Mean
         m = np.mean(y)
-        # y -= m
         
         #Solve Optimization Problem Outlined in Equation (8)
         D_tilde = Dl
