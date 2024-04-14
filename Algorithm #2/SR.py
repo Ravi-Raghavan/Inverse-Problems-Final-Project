@@ -141,14 +141,14 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray, u
             D_tilde = np.concatenate((D_tilde, beta * (P @ Dh)), axis = 0)
             y_tilde = np.concatenate((y_tilde, beta * w), axis = 0)
         
-        a = proximal_GD(D_tilde, y_tilde, 0.001, 0.1, 100) 
+        a = proximal_GD(D_tilde, y_tilde, 0.001, 0.0001, 10) 
         x = Dh @ a + m
         x = x.reshape(patch_shape, order = 'F')
         insert_patch(X0, patch_shape, stride, patch_num, x)
         
         print(f"Finished Processing Patch # {patch_num + 1}")
     
-    X = GD(Y, X0, 0.001, 0, 100, blur_kernel, upscale)
+    X = GD(Y, X0, 0.001, 0.00001, 1000, blur_kernel, upscale)
     return X   
         
         
@@ -207,9 +207,9 @@ def downsample(M, N, upscale):
 def pad_image(image: np.ndarray, kernel: np.ndarray):
     Mk, Nk = kernel.shape
     
-    #Add Mk - 1 Padding row-wise. Add Nk - 1 padding column wise
-    image = np.vstack([image, np.zeros((Mk - 1, image.shape[1]))])    
-    image = np.hstack([image, np.zeros((image.shape[0], Nk - 1))])
+    #Add Mk - 1 Padding on each side row-wise. Add Nk - 1 padding on each side column wise
+    image = np.hstack([np.zeros((image.shape[0], (Nk - 1) // 2)), image, np.zeros((image.shape[0], (Nk - 1) // 2))])
+    image = np.vstack([np.zeros(((Mk - 1) // 2, image.shape[1])), image, np.zeros(((Mk - 1) // 2, image.shape[1]))])    
     
     return image
 
@@ -256,15 +256,22 @@ def GD(Y: np.ndarray, X0: np.ndarray, step_size, c, iterations, blur_kernel, ups
     X_padded = X_padded.reshape((-1, 1))
     print(X_padded.shape)
     
+    loss = np.linalg.norm(Y_reshaped - (S @ H @ X_padded)) ** 2
+    print(f"Loss at Iteration 0: {loss}")
+    
     for iter in range(iterations):
         B = c * (X_padded - X0_padded)
         Q = (H.T @ S.T @ (Y_reshaped - (S @ H @ X_padded))) + (c * (X_padded - X0_padded))
         X_padded += step_size * Q
         
-        print(f"Iteration {iter + 1} of GD Finished")
+        loss = np.linalg.norm(Y_reshaped - (S @ H @ X_padded)) ** 2
+        print(f"Loss at Iteration {iter + 1}: {loss}")
     
     X_padded = X_padded.reshape(padded_matrix_shape)
-    X = X_padded[0: Mi, 0: Ni]
+    
+    start = (Mk - 1) // 2
+    end = (Nk - 1) // 2
+    X = X_padded[start: Mi + start, end: Ni + end]
     return X
 
 #Run SR Algorithm on a Test Low Resolution Image
@@ -288,6 +295,8 @@ blur_kernel = np.ones(shape = (3, 3)) / 9
 upscale = 4.0
 X = SR(Dh, Dl, lIm, blur_kernel, upscale)
 
+#Normalize to be in range [0, 1]
+X = (X - X.min()) / (X.max() - X.min())
 print("Finished Super Resolution")
 
 #Save X, lIm, and hIm to npy files

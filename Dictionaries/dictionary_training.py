@@ -14,18 +14,22 @@ nSmp = 10000 #number of patches to sample
 upscale = 4 #upscale factor
 
 #randomly generate patches
+print("Going to Randomly Generate Patches")
 Xh, Xl = rnd_smp_patch(training_image_path, '.bmp', patch_size, nSmp, upscale)
 
 #Prune patches with small variance
-Xh, Xl = patch_pruning(Xh, Xl, threshold = 10)
+print("Going to Prune Patches")
+Xh, Xl = patch_pruning(Xh, Xl, threshold = 1)
 
 print(Xh.shape, Xl.shape)
 
 #Joint Dictionary Training
 start_time = time.time()
-step_size = 0.001
+step_size = 0.0001
 threshold = 0.0001
-Dc = train_coupled_dict(Xh, Xl, dict_size, step_size, lamb, threshold)
+max_iter = 10
+print("Going to Jointly Train Dictionaries")
+Dc = train_coupled_dict(Xh, Xl, dict_size, step_size, lamb, threshold, max_iter)
 end_time = time.time()
 
 elapsed_time = end_time - start_time

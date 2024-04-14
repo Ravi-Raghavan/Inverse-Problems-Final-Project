@@ -12,6 +12,9 @@ lIm = np.load(lIm_npy)
 hIm = np.load(hIm_npy)
 X = np.load(X_npy)
 
+X = np.clip(X, 0, 255)
+print(X)  # Output: [ 5  5 10 15 15]
+
 
 # Plot the matrix as an image
 # Create a figure with subplots
