@@ -9,7 +9,7 @@ training_image_path = "../Data/Training"
 
 dict_size = 512 #Dictionary Size will be 512
 lamb = 0.15 #sparsity regularization
-patch_size = 3 #size of patches will be 3 x 3
+patch_size = 5 #size of patches will be 3 x 3
 nSmp = 10000 #number of patches to sample
 upscale = 4 #upscale factor
 

@@ -83,22 +83,23 @@ def generate_w(X0: np.ndarray, patch_shape: tuple, stride, patch_num):
     
     return patch.flatten(order = 'F')
 
-def gradient(patch_shape: tuple):    
-    patch_size = patch_shape[0] * patch_shape[1]
+def F(y: np.ndarray):
+    #Compute first order derivatives
+    hf1 = np.array([-1,0,1]).reshape((1, -1))
+    vf1 = hf1.T
     
-    data = np.tile(np.array([1, -1, 1, -1]), patch_shape[0])
+    yG11 = convolve2d(y, hf1[::-1, ::-1],'same').flatten(order = 'F') #row wise 1st order derivative
+    yG12 = convolve2d(y, vf1[::-1, ::-1],'same').flatten(order = 'F') #column wise 1st order derivative
     
-    rows = [0, 1, 1, 2,  3, 4, 4, 5,  6, 7, 7, 8]
-    cols = [1, 0, 2, 1,  4, 3, 5, 4,  7, 6, 8, 7]
+    #Compute second order derivatives
+    hf2 = np.array([1,0,-2,0,1]).reshape((1, -1))
+    vf2 = hf2.T
     
-    return csr_matrix((data, (rows, cols)), shape = (patch_size, patch_size))
-
-def F(y: np.ndarray, patch_shape: tuple):
-    grad = gradient(patch_shape)
-    row_grad = grad @ y.reshape((-1, 1), order = 'C')
-    col_grad = grad @ y.reshape((-1, 1), order = 'F')
+    yG21 = convolve2d(y, hf2[::-1, ::-1], 'same').flatten(order = 'F') #row wise 2nd order derivative
+    yG22 = convolve2d(y, vf2[::-1, ::-1], 'same').flatten(order = 'F') #column wise 2nd order derivative
     
-    return np.vstack((row_grad, col_grad))
+    y_features = np.concatenate((yG11, yG12, yG21, yG22)).reshape((-1, 1))
+    return y_features
 
 #Super Resolution via Sparse Representation
 #Dh: Dictionary for High Resolution Patches
@@ -114,7 +115,7 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray, u
     beta = 1
     
     #Patch size that will be used to extract patches from low resolution image
-    patch_shape = (3, 3)
+    patch_shape = (5, 5)
     stride = patch_shape[0] - 1
     
     #Set up the Approximation of the High Resolution Image
@@ -131,7 +132,7 @@ def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray, blur_kernel: np.ndarray, u
         
         #Solve Optimization Problem Outlined in Equation (8)
         D_tilde = Dl
-        y_tilde = F(y, patch_shape)
+        y_tilde = F(y)
         
         if patch_num > 0:
             P = generate_P(X0, patch_shape, stride, patch_num)
