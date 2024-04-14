@@ -107,7 +107,7 @@ def quadratic_objective_function(D_flat, X, Z):
 
 def quadratic_constraints(D_flat):
     # Reshape the flattened D to its original shape
-    D = D_flat.reshape(X.shape[0], -1)
+    D = D_flat.reshape(D_flat.shape[0], -1)
     # Compute the norm squared for each column of D
     norm_squared = np.sum(D**2, axis=0)
     # Return the constraint function as a vector
