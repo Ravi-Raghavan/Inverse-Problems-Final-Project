@@ -25,8 +25,8 @@ lmbd = 0.1
 upscale = 3
 maxIter = 100
 
-lr_image_path = "../Data/Testing/Child.png"
-hr_image_path = "../Data/Testing/Child_gnd.bmp"
+lr_image_path = "../Data/Testing/Lion.jpg"
+hr_image_path = "../Data/Testing/Lion_gnd.jpg"
 
 #Read Low Resolution Image. Cv2 reads in BGR order so must be flipped! 
 img_lr = cv2.imread(lr_image_path)
