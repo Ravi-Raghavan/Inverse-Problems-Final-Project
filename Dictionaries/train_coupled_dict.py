@@ -23,28 +23,22 @@ def train_coupled_dict(Xh, Xl, dict_size, step_size, lamb, threshold, max_iter):
     
     #cap maximum iterations at max_iter
     for iter in range(max_iter):
-        # Z = linear_programming(Xc, Dc, Dc.shape[1], Xc.shape[1], step_size, lamb, threshold, 100)
         Z = lasso_optimization(Xc, Dc, lamb)
         
         Xc_pred = Dc @ Z
         print(f"Iteration {iter + 1}/{max_iter} Linear Programming Stat: {np.linalg.norm(Xc - Xc_pred) / np.linalg.norm(Xc)}")
         
         Dc = quadratic_programming(Xc, Z, Dc.shape[0], Dc.shape[1], step_size, threshold, 30)
-        # Dc = quadratic_programming_CVXPY(Xc, Z)
         
         Xc_pred = Dc @ Z
         print(f"Iteration {iter + 1}/{max_iter} Quadratic Programming Stat: {np.linalg.norm(Xc - Xc_pred) / np.linalg.norm(Xc)}")
-        print(f"Completed Iteration {iter + 1}/{max_iter}")
     
     return Dc
 
 #Lasso Optimization
 def lasso_optimization(Xc, Dc, lamb):
-    # print("Beginning Lasso Optimization")
     clf = linear_model.Lasso(alpha = lamb, max_iter = 100000, fit_intercept = False)
-    # print("Initialized Lasso Model")
     clf.fit(Dc, Xc)
-    # print("Fitted lasso model")
     return clf.coef_.T
         
 #prox operator
@@ -152,26 +146,3 @@ def quadratic_programming_CVXPY(X, Z):
     optimized_D = D.value
     
     return optimized_D
-
-
-# D = np.random.normal(size = (125, 512))
-# Z = np.random.normal(size = (512, 96))
-# X = D @ Z
-
-# test_Z = lasso_optimization(X, D, 0.15)
-# print(test_Z.shape)
-
-# X_pred = D @ test_Z
-
-# print(np.linalg.norm(X - X_pred) / np.linalg.norm(X))
-
-# print("Testing Linear Programming")
-# linear_programming(X, D, Z.shape[0], Z.shape[1], 0.001, 0, 0.0001, 100)
-
-# print("Testing Quadratic Programming")
-# D = np.random.normal(size = (25, 512))
-# D = normalize(D)
-
-# Z = np.random.normal(size = (512, 30))
-# X = D @ Z
-# quadratic_programming(X, Z, D.shape[0], D.shape[1], 0.001, 0.0001, 100)
