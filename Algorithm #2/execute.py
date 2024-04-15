@@ -8,8 +8,8 @@ from sklearn.preprocessing import normalize
 import matplotlib.pyplot as plt
 
 # Set which dictionary you want to use    
-Dh = np.load("../Dictionaries/Dh_512_0.15_5.npy")
-Dl = np.load("../Dictionaries/Dl_512_0.15_5.npy")
+Dh = np.load("../Dictionaries/Dh.npy")
+Dl = np.load("../Dictionaries/Dl.npy")
 
 Dh = normalize(Dh)
 Dl = normalize(Dl)
@@ -22,11 +22,11 @@ US_mag = 3
 
 overlap = 1
 lmbd = 0.1
-upscale = 3
+upscale = 4
 maxIter = 100
 
-lr_image_path = "../Data/Testing/Lion.jpg"
-hr_image_path = "../Data/Testing/Lion_gnd.jpg"
+lr_image_path = "../Data/Testing/Fox.jpg"
+hr_image_path = "../Data/Testing/Fox_gnd.jpg"
 
 #Read Low Resolution Image. Cv2 reads in BGR order so must be flipped! 
 img_lr = cv2.imread(lr_image_path)
@@ -64,7 +64,7 @@ axes[0].set_title('SuperResolution Image')  # Set title
 axes[0].set_xlabel('Columns')  # Set label for x-axis
 axes[0].set_ylabel('Rows')  # Set label for y-axis
 
-axes[1].imshow(cv2.cvtColor(img_lr_ori, cv2.COLOR_BGR2RGB), cmap='gray')  # You can choose different colormaps ('gray' for grayscale)
+axes[1].imshow(resize(cv2.cvtColor(img_lr_ori, cv2.COLOR_BGR2RGB), (img_hr.shape[0], img_hr.shape[1]), order = 0), cmap='gray')  # You can choose different colormaps ('gray' for grayscale)
 axes[1].set_title('Original Low Resolution Image')  # Set title
 axes[1].set_xlabel('Columns')  # Set label for x-axis
 axes[1].set_ylabel('Rows')  # Set label for y-axis

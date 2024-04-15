@@ -9,12 +9,12 @@ import cv2
 test_path = '../Data/Testing/'
 
 numTestImages = len(listdir(test_path))
-upscale = 3.0
+upscale = 4.0
 
 for i in tqdm(range(numTestImages)):
     img_name = listdir(test_path)[i]
     
-    if '_gnd' in img_name:
+    if 'Fox_gnd' in img_name:
         lr_name = img_name.replace("_gnd", "")
         hIm = cv2.imread('{}{}'.format(test_path, img_name))
         new_img = cv2.resize(hIm, tuple(int(x * (1/upscale)) for x in hIm.shape)[-2::-1], interpolation = cv2.INTER_NEAREST)
