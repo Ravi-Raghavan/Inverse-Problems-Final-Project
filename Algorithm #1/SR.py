@@ -1,237 +1,95 @@
-### Experimenting Around with Algorithm 1
-import numpy as np
-import cv2
+import numpy as np 
+from skimage.transform import resize
+from featureSign import featureSign
+from scipy.signal import convolve2d
+from tqdm import tqdm
 
-#I: Image/Array
-#patch_shape: shape of patch
-#stride: stride
-#patch_num: number of patch
-def extract_patch(I: np.ndarray, patch_shape: tuple, stride, patch_num):
-    R, C = I.shape #image shape
-    Kr, Kc = patch_shape #patch shape
-    
-    pH = 1 + int((C - Kc) / stride) #number of patches per horizontal strip
-    pC = 1 + int((R - Kr) / stride) #number of patches per vertical strip
-    
-    #extract patch
-    hStrip = patch_num // pH 
-    vStrip = patch_num % pH
-    patch = I[stride * hStrip: stride * hStrip + Kr, stride * vStrip: stride * vStrip + Kc]
-    return patch
+#Compute Features using First and Second Order Gradient Filters
+def F(img_lr: np.ndarray):
+    h, w = img_lr.shape
+    img_lr_feat = np.zeros((h, w, 4))
 
-#I: Image/Array
-#patch_shape: shape of patch
-#stride: stride
-#patch_num: number of patch
-def insert_patch(I: np.ndarray, patch_shape: tuple, stride, patch_num, patch: np.ndarray):
-    R, C = I.shape #image shape
-    Kr, Kc = patch_shape #patch shape
-    
-    pH = 1 + int((C - Kc) / stride) #number of patches per horizontal strip
-    pC = 1 + int((R - Kr) / stride) #number of patches per vertical strip
-    
-    #insert patch
-    hStrip = patch_num // pH 
-    vStrip = patch_num % pH
-    I[stride * hStrip: stride * hStrip + Kr, stride * vStrip: stride * vStrip + Kc] = patch
-    return patch
+    # First order gradient filters
+    hf1 = [[-1, 0, 1], ] * 3
+    vf1 = np.transpose(hf1)
 
-def generate_P(X0: np.ndarray, patch_shape: tuple, stride, patch_num):
-    R, C = X0.shape #image shape
-    Kr, Kc = patch_shape #patch shape
-    
-    pH = 1 + int((C - Kc) / stride) #number of patches per horizontal strip
-    pC = 1 + int((R - Kr) / stride) #number of patches per vertical strip
-    
-    hStrip = patch_num // pH 
-    vStrip = patch_num % pH
-    
-    P = np.zeros(shape = (Kr * Kc, Kr * Kc))
-    idx = []
-    if (hStrip > 0 and vStrip > 0):
-        idx = [0, 1, 2, 3, 6]
-    elif (hStrip > 0 and vStrip == 0):
-        idx = [0, 3, 6]
-    elif (hStrip == 0 and vStrip > 0):
-        idx = [0, 1, 2]
-    
-    P[idx, idx] = 1
-    return P
+    img_lr_feat[:, :, 0] = convolve2d(img_lr, hf1, 'same')
+    img_lr_feat[:, :, 1] = convolve2d(img_lr, vf1, 'same')
 
-def generate_w(X0: np.ndarray, patch_shape: tuple, stride, patch_num):
-    R, C = X0.shape #High Resolution Image shape
-    Kr, Kc = patch_shape #patch shape
-    
-    pH = 1 + int((C - Kc) / stride) #number of patches per horizontal strip
-    pC = 1 + int((R - Kr) / stride) #number of patches per vertical strip
-    
-    hStrip = patch_num // pH 
-    vStrip = patch_num % pH
-    
-    patch = extract_patch(X0, patch_shape, stride, patch_num)
-    
-    if (hStrip > 0 and vStrip > 0):
-        patch[1: , 1: ] = 0
-    elif (hStrip > 0 and vStrip == 0):
-        patch[1:, :] = 0
-    elif (hStrip == 0 and vStrip > 0):
-        patch[:, 1:] = 0
-    
-    return patch.flatten(order = 'F')
+    # Second order gradient filters
+    hf2 = [[1, 0, -2, 0, 1], ] * 3
+    vf2 = np.transpose(hf2)
 
-#Super Resolution via Sparse Representation
-#Dh: Dictionary for High Resolution Patches
-#Dl: Dictionary with Feature Vectors for each Vectorized Upsampled Low Resolution Patch
-#Y: Low Resolution Image
-def SR(Dh: np.ndarray, Dl: np.ndarray, Y: np.ndarray):
-    #Dh is a matrix of size N x Kh where N is the size of each vectorized high resolution patch
-    #Dl is a matrix of size M x Kl where M is the size of the corresponding feature vector for each vectorized, upsampled low resolution patch
-    N, _ = Dh.shape
-    M, _ = Dl.shape
+    img_lr_feat[:, :, 2] = convolve2d(img_lr, hf2, 'same')
+    img_lr_feat[:, :, 3] = convolve2d(img_lr, vf2, 'same')
+
+    return img_lr_feat
+
+def lin_scale(xh, us_norm):
+    hr_norm = np.linalg.norm(xh)
+
+    if hr_norm > 0:
+        s = us_norm * 1.2 / hr_norm
+        xh *= s
+    return xh
+
+def SR(img_lr_y, size, upscale, Dh, Dl, lmbd, overlap):
+    patch_size = 5
+
+    #Upsample the low resolution image
+    img_us = resize(img_lr_y, size)
+    img_us_height, img_us_width = img_us.shape
     
-    #This parameter was set to 1 in all the authors' experiments
-    beta = 1
-    
-    #Patch size that will be used to extract patches from low resolution image
-    patch_shape = (10, 10)
-    patch_size = patch_shape[0] * patch_shape[1]
-    stride = patch_shape[0] - 1
-    
-    #We will be multiplying this with the approximate patches of the low resolution image to extract features
-    #This will be a row-wise gradient extractor
-    F = -1 * np.eye(patch_size)
-    indices = np.arange(patch_size)[:: patch_shape[0]]
-    insert_indices = indices + 2
-    F[indices, insert_indices] = 1
-    
-    X0 = np.zeros(shape = Y.shape) #approximation of high resolution image
-    total_patches = (1 + int((Y.shape[0] - patch_shape[0]) / stride)) ** 2 #number of total patches in the low resolution image
-    
-    print(f"Total Patches: {total_patches}")
-    for patch_num in range(total_patches):
-        y = extract_patch(Y, patch_shape, 2, patch_num).flatten(order = 'F').reshape((-1, 1))
-        #Normalize to have 0 mean
-        m = np.mean(y)
-        y -= m
-        
-        #Solve Optimization Problem Outlined in Equation (8)
-        D_tilde = Dl
-        y_tilde = F @ y
-        
-        if patch_num > 0:
-            # P = generate_P(X0, patch_shape, 2, patch_num)
-            P = generate_P(X0, (5, 5), 2, patch_num)
-            # w = generate_w(X0, patch_shape, 2, patch_num).reshape((-1, 1)) #make w a column vector
-            w = generate_w(X0, (5, 5), 2, patch_num).reshape((-1, 1)) #make w a column vector
+    #Initialize the high resolution image
+    img_hr = np.zeros(img_us.shape)
+    cnt_matrix = np.zeros(img_us.shape)
+
+    #Extract first order and second order gradients from the upscaled, low resolution image
+    img_lr_y_feat = F(img_us)
+
+    #Create a grid over which we can obtain all the patches
+    gridx = np.append(np.arange(0, img_us_width - patch_size - 1, patch_size - overlap), img_us_width - patch_size - 1)
+    gridy = np.append(np.arange(0, img_us_height - patch_size - 1, patch_size - overlap), img_us_height - patch_size - 1)
+
+    count = 0
+
+    #Iterate over each point in the grid
+    for m in tqdm(range(0, len(gridx))):
+        for n in range(0, len(gridy)):
+            count += 1
+            xx = int(gridx[m])
+            yy = int(gridy[n])
+
+            #Get Upsampled patch from the Low Res Image
+            us_patch = img_us[yy : yy + patch_size, xx : xx + patch_size]
+            us_mean = np.mean(us_patch)
+            us_patch = us_patch.flatten(order='F') - us_mean
+            us_norm = np.linalg.norm(us_patch)
+
+            #Get Feature Patch from Gradient Patch
+            feat_patch = img_lr_y_feat[yy : yy + patch_size, xx : xx + patch_size, :]
+            feat_patch = feat_patch.flatten(order='F')
+            feat_norm = np.linalg.norm(feat_patch)
             
-            D_tilde = np.concatenate((D_tilde, beta * (P @ Dh)), axis = 0)
-            y_tilde = np.concatenate((y_tilde, beta * w), axis = 0)
-        
-        a = proximal_GD(D_tilde, y_tilde, 0.001, 0.1, 10) 
-        x = Dh @ a + m
-        # x = x.reshape(patch_shape, order = 'F')
-        x = x.reshape((5, 5), order = 'F')
-        # insert_patch(X0, patch_shape, stride, patch_num, x)
-        insert_patch(X0, (5, 5), stride, patch_num, x)
-        
-        print(f"Finished Processing Patch # {patch_num + 1}")
-    
-    return X0   
+            #Normalize Feature Patch if needed
+            if feat_norm > 1:
+                y = feat_patch / feat_norm
+            else:
+                y = feat_patch
+                
+            w = featureSign(y, Dl, lmbd)
 
-# reconstruction gradient descent to find 
-def reconstruction_GD(X0: np.ndarray, Y: np.ndarray, v, c, numIter=100): 
-    Xt = np.zeros(shape=X0.shape)
+            hr_patch = Dh @ w
+            hr_patch = lin_scale(hr_patch, us_norm)
 
-    for _ in range(numIter): 
-        blurred_Xt = cv2.GaussianBlur(Xt, (21, 21), 0)
-        downsampled_blurred_Xt = cv2.resize(blurred_Xt, Y.shape)
+            hr_patch = np.reshape(hr_patch, (patch_size, -1))
+            hr_patch += us_mean
 
-        Xt = Xt + v * (cv2.GaussianBlur(cv2.resize((Y - downsampled_blurred_Xt), Xt.shape), (21, 21), 0) + c * (Xt - X0))
+            img_hr[yy : yy + patch_size, xx : xx + patch_size] += hr_patch
+            cnt_matrix[yy : yy + patch_size, xx : xx + patch_size] += 1
 
-    return Xt
-
-
-        
-#prox operator
-def prox(x, alpha):
-    return np.piecewise(x, [x < -alpha, (x >= -alpha) & (x <= alpha), x >= alpha], [lambda x: x + alpha, 0, lambda x: x - alpha])
-    
-
-#Use Proximal GD to Solve Optimization Problem Outlined in Equation (8)
-def proximal_GD(D_tilde: np.ndarray, y_tilde: np.ndarray, step_size, lamb, iterations):
-    a = np.random.normal(size = (D_tilde.shape[1], 1))
-    loss = (np.linalg.norm(D_tilde @ a - y_tilde) ** 2) + (lamb * (np.sum(np.abs(a))))
-    # print(f"Loss: {loss}, Iteration: 0")
-    
-    for i in range(iterations):
-        grad = 2 * (D_tilde.T @ D_tilde @ a) - 2 * (D_tilde.T @ y_tilde)
-        a = a + step_size * (-1 * grad)
-        a = prox(a, step_size * lamb)
-        
-        loss = (np.linalg.norm(D_tilde @ a - y_tilde) ** 2) + (lamb * (np.sum(np.abs(a))))
-        # print(f"Loss: {loss}, Iteration: {i + 1}")
-    
-    return a
-        
-            
-
-#Test Patch Extraction
-# Define the values for the array
-values = [
-    [1, 2, 3, 4, 5],
-    [6, 7, 8, 9, 10],
-    [11, 12, 13, 14, 15],
-    [16, 17, 18, 19, 20],
-    [21, 22, 23, 24, 25]
-]
-
-# Create a NumPy array from the values
-A = np.array(values)
-for patch_num in range(4):
-    print(extract_patch(A, (3, 3), 2, patch_num))
-    
-
-# #Run a brief test of SR Algorithm with Dummy Matrices
-# #Let's say we were working with 3 x 3 patches from the High Resolution Image and the Upsampled, Low Resolution Image
-# Dh = np.random.normal(size = (9, 512))
-# Dl = np.random.normal(size = (9, 512)) #since we are only using 1 1D filter for now, set to 9
-# Y = np.random.normal(size = (100, 100))
-
-# X0 = SR(Dh, Dl, Y)
-
-# Xstar = reconstruction_GD(X0, Y, 0.1, 10)
-
-# print(Xstar.shape)
-# print(Y.shape)
-
-# print("MSE before:", np.linalg.norm(Y - X0) ** 2 / np.linalg.norm(Y) ** 2)
-# print("MSE after:", np.linalg.norm(Y - Xstar) ** 2 / np.linalg.norm(Y) ** 2)
-
-
-Dh = np.load("../Dictionaries/Dh_512_0.15_5.npy")
-Dl = np.load("../Dictionaries/Dl_512_0.15_5.npy")
-
-print(Dh.shape)
-print(Dl.shape)
-
-
-image = cv2.imread('../test.jpeg', cv2.IMREAD_GRAYSCALE)
-
-# print(image.shape)
-Y = cv2.resize(image, (256, 256))
-Y_upscaled = cv2.resize(Y, image.shape)
-# cv2.imshow('High Resolution Image', image)
-# cv2.imshow('Low Resolution Image', Y_upscaled)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
-
-X0 = SR(Dh, Dl, Y_upscaled.astype(np.float64))
-
-print(X0.shape)
-Xstar = reconstruction_GD(X0, Y, 0.1, 10)
-
-cv2.imshow('Original Image', image)
-cv2.imshow('Super Resolution Image', Xstar)
-cv2.imshow('Upscaled Low Resolution Image', Y_upscaled)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+    index = np.where(cnt_matrix < 1)[0]
+    img_hr[index] = img_us[index]
+    cnt_matrix[index] = 1
+    img_hr = np.divide(img_hr, cnt_matrix)
+    return img_hr
