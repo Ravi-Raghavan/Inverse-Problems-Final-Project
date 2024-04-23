@@ -18,8 +18,8 @@ def backprojection(U, img_lr, maxIter):
     p = np.multiply(p, p)
     p = np.divide(p, np.sum(p))
     
-    _, r = U.shape
-    c = np.random.normal(size = (r, 1))
+    n, r = U.shape
+    c = np.abs(np.random.normal(size = (r, n)))
 
     for i in range(maxIter):
         img_sr = U @ c

@@ -8,7 +8,8 @@ from sklearn.preprocessing import normalize
 import matplotlib.pyplot as plt
 
 #Get U. Replace the None with something Later
-U = None
+U = np.load("U.npy")
+print(np.max(U), np.min(U))
 
 # Set which dictionary you want to use    
 Dh = np.load("../Dictionaries/Dh.npy")
